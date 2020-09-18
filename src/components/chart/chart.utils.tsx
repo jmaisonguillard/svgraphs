@@ -1,12 +1,15 @@
 // @ts-nocheck
-import dayjs from "dayjs";
 import React from "react";
-import { merge } from "lodash";
+import ReactDOM from "react-dom";
+import { merge, get } from "lodash";
+import dayjs from "dayjs";
 
 type ChartInterface = {
   canvas: HTMLCanvasElement;
   ctx: CanvasRenderingContext2D;
 } & Partial<DefaultProps>;
+
+const tooltipRegex = /{(?<resource>label|dsd)([\|date:](?<format>[a-zA-Z,: [\]]+)|.(?<index>[0-9{1, 9}]))}/gm;
 
 const defaultProps = {
   data: {} as any,
@@ -14,30 +17,52 @@ const defaultProps = {
   width: 300 as number,
   height: 150 as number,
   options: {
-    backgroundColor: "#26374C" as string,
+    backgroundColor: "rgba(38, 55, 76, 1)" as string,
+    padding: 0 as string | number[],
+    onPointClick: () => {},
     labels: {
       type: "" as string,
       format: "" as string,
-      textColor: "#8DABC4" as string,
+      textColor: "rgba(141, 171, 196, 1)" as string,
     },
     graph: {
       border: true as boolean,
       borderWidth: 1 as number,
-      borderColor: "#3F536E" as string,
-      backgroundColor: "#212F40" as string,
+      borderColor: "rgba(63, 83, 110, 1)" as string,
+      backgroundColor: "rgba(33, 47, 64, 1)" as string,
+      point: {
+        backdropPoint: false as boolean,
+        pointColor: "rgba(33, 47, 64, 1)" as string,
+        strokeColor: "rgba(33, 47, 64, 1)" as string,
+        strokeWidth: 1 as number,
+        radius: 5 as number,
+        singleHoverHighlight: true as boolean,
+        selected: {
+          pointColor: "transparent" as string,
+          strokeColor: "rgba(255, 255, 255, 1)" as string,
+          strokeWidth: 2 as number,
+        },
+      },
+      path: {
+        borderColor: "rgba(141, 171, 196, 1)" as string,
+        borderWidth: 2 as number,
+      },
     },
     indicators: {
       borderWidth: 1 as number,
-      borderColor: "#8DABC4" as string,
-      backgroundColor: "#212F40" as string,
+      borderColor: "rgba(141, 171, 196, 1)" as string,
+      backgroundColor: "rgba(33, 47, 64, 1)" as string,
+      fontSize: 9 as number,
+      letterSpacing: 0.5 as number,
+      fontColor: "rgba(255, 255, 255, 1)" as string,
     },
     yAxis: {
-      min: 0 as number,
+      min: 1 as number,
       max: 300 as number,
     },
     XAxis: {
-      min: 0 as number,
-      max: 0 as number,
+      min: 1 as number,
+      max: 1 as number,
     },
   } as any,
   redaw: false as boolean,
@@ -47,12 +72,8 @@ const defaultProps = {
 type DefaultProps = Readonly<typeof defaultProps>;
 
 export class Chart extends React.Component<ChartInterface> {
-  canvas: HTMLCanvasElement;
-  ctx: CanvasRenderingContext2D;
-  maxY: number;
-  ratioPointY: number;
-  ratioPointX: number;
-  xOffset: number = 40;
+  chart: SVGSVGElement;
+  chartPadding: number[] = [];
   points: number[] = [];
 
   static defaultProps = defaultProps;
@@ -60,49 +81,41 @@ export class Chart extends React.Component<ChartInterface> {
   constructor(props: any, ref: any) {
     super(merge(defaultProps, props));
     if (ref && ref.current) {
-      this.canvas = ref.current as HTMLCanvasElement;
-      this.ctx = this.canvas.getContext("2d");
+      this.chart = ref.current;
       this.init();
     }
   }
 
+  updateGraph() {
+    this.generatePadding();
+  }
+
+  generatePadding() {
+    const padding = this.getOption("padding");
+
+    if (Array.isArray(padding)) {
+      if (padding.length === 4) {
+        this.chartPadding = padding;
+      } else if (padding.length === 2) {
+        this.chartPadding = Array.from({ length: 2 }, () => padding).flat();
+      } else if (padding.length === 1) {
+        this.chartPadding = Array(4).fill(padding[0]);
+      }
+    } else {
+      this.chartPadding = Array(4).fill(padding);
+    }
+
+    // Recalculate Width & Height
+    const [top, right, bottom, left] = this.chartPadding;
+    const width = this.chart.clientWidth + left + right;
+    const height = this.chart.clientHeight + top + bottom;
+
+    this.chart.style.width = `${width}px`;
+    this.chart.style.height = `${height}px`;
+  }
+
   componentDidMount() {
-    this.updateCanvas();
-  }
-
-  roundedRect(
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-    radius: number
-  ) {
-    ctx.beginPath();
-    ctx.moveTo(x, y + radius);
-    ctx.lineTo(x, y + height - radius);
-    ctx.arcTo(x, y + height, x + radius, y + height, radius);
-    ctx.lineTo(x + width - radius, y + height);
-    ctx.arcTo(x + width, y + height, x + width, y + height - radius, radius);
-    ctx.lineTo(x + width, y + radius);
-    ctx.arcTo(x + width, y, x + width - radius, y, radius);
-    ctx.lineTo(x + radius, y);
-    ctx.arcTo(x, y, x, y + radius, radius);
-    ctx.stroke();
-    ctx.fill();
-  }
-
-  calculateRatio() {
-    let ctx = this.ctx,
-      dpr = window.devicePixelRatio || 1,
-      bsr =
-        ctx.webkitBackingStorePixelRatio ||
-        ctx.mozBackingStorePixelRatio ||
-        ctx.msBackingStorePixelRatio ||
-        ctx.oBackingStorePixelRatio ||
-        ctx.backingStorePixelRatio ||
-        1;
-    return dpr / bsr;
+    this.updateGraph();
   }
 
   init() {
@@ -116,191 +129,508 @@ export class Chart extends React.Component<ChartInterface> {
     }
   }
 
+  getOption(option) {
+    return get(this.props.options, option, "");
+  }
+
   drawLineChart() {
-    const graphHeight = this.canvas.clientHeight - 47,
-      graphWidth = this.canvas.clientWidth - 128,
-      sections = this.props.data.labels.length - 1,
-      sectionWidth = graphWidth / sections;
+    this.updateGraph();
 
-    // Find Max Y value....
-    var dataRanges = [];
-    for (let dataset of this.props.data.datasets)
-      dataRanges = dataRanges.concat(...dataset.data);
-    this.maxY = Math.max(...dataRanges);
-    this.ratioPointY = graphHeight / this.props.options.yAxis.max;
-    this.ratioPointX = graphWidth / this.props.options.XAxis.max;
+    const [top, right, bottom, left] = this.chartPadding;
+    const [graphWidth, graphHeight] = [
+      this.chart.clientWidth - right - left,
+      this.chart.clientHeight - top - bottom,
+    ];
+    const sections = this.props.data.labels.length || 0;
+    const sectionWidth = graphWidth / sections;
 
-    // Smooth canvas out...
-    this.updateCanvas();
+    this.calculatePointLocations(
+      top,
+      right,
+      bottom,
+      left,
+      sectionWidth,
+      graphWidth,
+      graphHeight
+    );
 
-    this.ctx.fillStyle = this.props.options.backgroundColor;
-    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    const html = (
+      <>
+        {this.getOption("backgroundColor") && (
+          <>
+            {/* Display SVG Background */}
+            <rect
+              x={0}
+              y={0}
+              width={this.chart.clientWidth}
+              height={this.chart.clientHeight}
+              fill={this.getOption("backgroundColor")}
+            />
 
-    if (this.props.data.indicators.length) {
-      this.xOffset = 77.5;
-    }
+            {/* Display Graph */}
+            <rect
+              id={`graph-rect`}
+              x={left}
+              y={top}
+              width={graphWidth}
+              height={graphHeight}
+              fill={this.getOption("graph.backgroundColor")}
+              stroke={this.getOption("graph.borderColor")}
+              strokeWidth={this.getOption("graph.borderWidth")}
+            />
 
-    // Generate Borders
-    if (this.props.options.graph.border) {
-      this.ctx.strokeStyle = this.props.options.graph.borderColor;
-      this.ctx.lineWidth = 1;
-      this.ctx.strokeRect(
-        this.xOffset,
-        43,
-        this.canvas.clientWidth - 128,
-        this.canvas.clientHeight - 73
-      );
-    }
+            {/* Display Indicators */}
+            {this.props.data.indicators &&
+              this.props.data.indicators.map((indicator) => {
+                const width = 37,
+                  height = 16,
+                  x = width / 2,
+                  y = graphHeight - indicator;
 
-    // Generate Left Indicators
-    if (this.props.data.indicators) {
-      for (let indicator of this.props.data.indicators) {
-        const x = 20,
-          y = graphHeight - indicator * this.ratioPointY;
-        const width = 38,
-          height = 17;
-        this.ctx.strokeStyle = this.props.options.indicators.borderColor;
-        this.ctx.fillStyle = this.props.options.indicators.backgroundColor;
-        this.ctx.setLineDash([0]);
-        this.roundedRect(this.ctx, x, y, width, height, 8.5);
-        this.ctx.fillStyle = "white";
-        this.ctx.font = "9px serif bold";
-        this.ctx.textAlign = "center";
-        this.ctx.textBaseline = "middle";
-        this.ctx.fillText(
-          indicator,
-          Math.ceil(x + width / 2),
-          Math.ceil(y + height / 2)
-        );
-        this.ctx.beginPath();
-        this.ctx.strokeStyle = this.props.options.indicators.borderColor;
-        this.ctx.lineWidth = 1;
-        this.ctx.setLineDash([4]);
-        this.ctx.moveTo(59, Math.ceil(y + height / 2));
-        this.ctx.lineTo(
-          this.canvas.clientWidth - 30,
-          Math.ceil(y + height / 2)
-        );
-        this.ctx.stroke();
-        this.ctx.setLineDash([0]);
+                return (
+                  <g
+                    key={`${this.chart.id}-indicator-${indicator}`}
+                    id={`${this.chart.id}-indicator-${indicator}`}
+                    className="indicator"
+                  >
+                    <rect
+                      x={x}
+                      y={y - height / 2}
+                      width={width}
+                      height={height}
+                      rx={height / 2}
+                      fill={this.getOption("indicators.backgroundColor")}
+                      stroke={this.getOption("indicators.borderColor")}
+                      strokeWidth={this.getOption("indicators.borderWidth")}
+                    />
+                    <foreignObject
+                      x={x}
+                      y={y - height / 2}
+                      width={width}
+                      height={height}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                    >
+                      <div>{indicator}</div>
+                    </foreignObject>
+                    <line
+                      x1={x + width}
+                      y1={y}
+                      x2={graphWidth + left + 20}
+                      y2={y + height / 2}
+                      stroke={this.getOption("indicators.borderColor")}
+                      strokeWidth={this.getOption("indicators.borderWidth")}
+                      strokeDasharray={4}
+                    />
+                  </g>
+                );
+              })}
+
+            {/* Display Labels */}
+            {this.props.data.labels &&
+              this.props.data.labels.map((label: string, index: number) => {
+                let displayLabel = label;
+                if (this.getOption("labels.type") === "date") {
+                  displayLabel = dayjs(label).format(
+                    this.getOption("labels.format")
+                  );
+                }
+                const x = left + sectionWidth * index,
+                  y = graphHeight + bottom,
+                  lines = displayLabel.split("\n").length,
+                  height = 9 / 2 + 9 * lines;
+                return (
+                  <g
+                    key={`${this.chart.id}-x-axis-labels-${index}`}
+                    className="x-axis-labels"
+                  >
+                    <foreignObject
+                      x={x}
+                      y={y}
+                      width={sectionWidth}
+                      height={height}
+                    >
+                      <div>{displayLabel}</div>
+                    </foreignObject>
+                  </g>
+                );
+              })}
+
+            {/* Generate Bars */}
+            {sections > 0 &&
+              Array(sections)
+                .fill(true)
+                .map((section: number, index: number) => {
+                  if (index > 0) {
+                    return (
+                      <line
+                        key={`${this.chart.id}-x-axis-dividers-${index}`}
+                        className={`${this.chart.id}-x-axis-dividers-${index}`}
+                        x1={left + sectionWidth * index}
+                        y1={top}
+                        x2={left + sectionWidth * index}
+                        y2={this.chart.clientHeight - bottom}
+                        stroke={this.getOption("graph.borderColor")}
+                        strokeWidth={this.getOption("graph.borderWidth")}
+                      />
+                    );
+                  }
+                })}
+
+            {/* Generate Label Blocks */}
+            {this.props.data.labelBox &&
+              this.props.data.labelBox.map((box, index) => {
+                const width = 40,
+                  height = 16,
+                  radius = height / 2,
+                  x = left + sectionWidth * index + width - height / 2,
+                  y = graphHeight + bottom - height - height / 4;
+                if (!box) return null;
+                return (
+                  <g
+                    key={`${this.chart.id}-label-box-${index}`}
+                    className={`x-axis-box`}
+                    width={sectionWidth}
+                    x={x}
+                    y={y}
+                  >
+                    <rect
+                      x={x}
+                      y={y}
+                      width={width}
+                      height={height}
+                      rx={radius}
+                      fill={this.getOption("indicators.backgroundColor")}
+                      stroke={this.getOption("indicators.borderColor")}
+                      strokeWidth={this.getOption("indicators.borderWidth")}
+                    />
+                    <foreignObject x={x} y={y} width={width} height={height}>
+                      <div>{box}</div>
+                    </foreignObject>
+                  </g>
+                );
+              })}
+
+            {/* Generate Points & Paths */}
+            {this.points &&
+              this.points.map((points, index) => (
+                <g key={`dataset-${index}`} id={`dataset-${index}`}>
+                  {/* Generate Paths */}
+                  {this.drawPaths(points, index)}
+
+                  {/* Generate Points */}
+                  {this.drawPoints(points, index)}
+                </g>
+              ))}
+
+            {/* Generate Tooltip */}
+            {this.drawToolTip()}
+          </>
+        )}
+      </>
+    );
+
+    ReactDOM.render(html, this.chart);
+  }
+
+  drawToolTip() {
+    const parseToolTipData = (data) => {
+      const matches = [...data.matchAll(tooltipRegex)];
+      for (let match of matches) {
+        if (match.groups.resource === "label") {
+          data = data.replace(match[0], "");
+        }
       }
-    }
+      return data;
+    };
 
-    // Generate Horizontal Bars
-    if (sections > 0) {
-      for (let i = 1; i < sections; i++) {
-        this.ctx.strokeStyle = this.props.options.graph.borderColor;
-        this.ctx.beginPath();
-        this.ctx.moveTo(this.xOffset + sectionWidth * i, 43);
-        this.ctx.lineTo(this.xOffset + sectionWidth * i, graphHeight + 17);
-        this.ctx.stroke();
-        this.ctx.closePath();
-      }
-    }
+    const constructHtml = { __html: parseToolTipData(this.props.data.tooltip) };
+    return (
+      <foreignObject width="200" x={200} y={200} id="tooltip-fo">
+        <div
+          className="chart-tooltip"
+          dangerouslySetInnerHTML={constructHtml}
+        ></div>
+      </foreignObject>
+    );
+  }
 
-    // Generate Labels...
-    for (let i = 1; i < this.props.data.labels.length; i++) {
-      let displayLabel = this.props.data.labels[i];
-      if (this.props.options.labels.type === "date") {
-        displayLabel = dayjs(displayLabel).format(
-          this.props.options.labels.format
-        );
-      }
-      this.drawMultiLineString(
-        displayLabel,
-        sectionWidth * i,
-        this.canvas.clientHeight,
-        11
-      );
-    }
-
-    // Generate Points...
+  calculatePointLocations(
+    top,
+    right,
+    bottom,
+    left,
+    sectionWidth,
+    graphWidth,
+    graphHeight
+  ) {
     for (let i = 0; i < this.props.data.datasets.length; i++) {
       this.points.push([]);
       for (let x = 0; x < this.props.data.datasets[i].data.length; x++) {
-        this.points[i].push([
-          this.xOffset + sectionWidth * x,
-          graphHeight - this.props.data.datasets[i].data[x] * this.ratioPointY,
-        ]);
-        this.drawCircle(
-          this.xOffset + sectionWidth * x,
-          graphHeight - this.props.data.datasets[i].data[x] * this.ratioPointY,
-          5,
-          0,
-          2 * Math.PI
-        );
+        if (Array.isArray(this.props.data.datasets[i].data[x])) {
+          for (let z = 0; z < this.props.data.datasets[i].data[x].length; z++) {
+            const spacing =
+              (sectionWidth - 15) / this.props.data.datasets[i].data[x].length;
+            this.points[i].push([
+              left + sectionWidth * x + (z > 0 ? spacing * z : 15),
+              graphHeight - this.props.data.datasets[i].data[x][z],
+              0,
+              this.props.data.datasets[i].data[x][z],
+            ]);
+          }
+        } else {
+          const { radius } = this.getOption("graph.point");
+          this.points[i].push([
+            left + sectionWidth * x + 1 * 15,
+            graphHeight - this.props.data.datasets[i].data[x] + radius / 2,
+            0,
+            this.props.data.datasets[i].data[x],
+          ]);
+        }
+      }
+    }
+  }
+
+  getDataSetsOption(dataset: any, index: number, option: string) {
+    if (get(dataset, option, false)) {
+      if (Array.isArray(dataset[option])) {
+        return dataset[option][index]
+          ? get(dataset, `${option}.${index}`, false)
+          : get(dataset, `${option}.${index - 1}`, false);
+      }
+      return get(dataset, option, false);
+    }
+  }
+
+  drawPaths(points: [], i?: number) {
+    const line = (pointA: any, pointB: any) => {
+      const lengthX = pointB[0] - pointA[0],
+        lengthY = pointB[1] - pointA[1];
+
+      return {
+        length: Math.sqrt(Math.pow(lengthX, 2) + Math.pow(lengthY, 2)),
+        angle: Math.atan2(lengthY, lengthX),
+      };
+    };
+
+    let lines = [];
+
+    points.reduce((previous, current, index, array) => {
+      const p = array[index - 1] || current;
+      const n = array[index + 1] || current;
+      const l = line(p, n);
+
+      const length = 0;
+      const angle = l.angle + (array ? Math.PI : 0);
+      const x = current[0] + angle * length;
+      const y = current[1] + angle * length;
+
+      lines.push(
+        <line
+          key={`${this.chart.id}-point-path-${index}-${
+            l.length
+          }-${Math.random()}`}
+          x1={p[0]}
+          y1={p[1]}
+          x2={x}
+          y2={y}
+          stroke={this.getOption("graph.path.borderColor")}
+          strokeWidth={this.getOption("graph.path.borderWidth")}
+        />
+      );
+
+      return false;
+    });
+
+    return lines;
+  }
+
+  setElementStyle(element: Element, ...args) {
+    let i = 0;
+    const l = args.length;
+    while (i < l) {
+      const previous = args[i - 1];
+      const current = args[i];
+
+      if (i % 2) {
+        element.style[previous] = current;
       }
 
-      this.points[i].reduce((previous, current, index, array) => {
-        console.log(array, index);
-        const p = previous || current;
-        const n = array[index + 1] || current;
-        const l = this.drawPath(p, n);
-      });
+      i++;
     }
   }
 
-  drawPath(pointA: number[], pointB: number[]) {
-    console.log(pointA, pointB);
-    return "test";
-  }
+  drawPoints(points: [], index?: number) {
+    const handlePointMouseEnter = (event) => {
+      const [x, y] = [
+        parseInt(event.target.getAttribute("cx"), 10),
+        parseInt(event.target.getAttribute("cy"), 10),
+      ];
+      const tooltip = document.getElementById("tooltip-fo");
+      const chart = document.getElementById("graph-rect");
+      if (chart && tooltip) {
+        tooltip.classList.add("visible");
+        if (parseInt(chart.getAttribute("height"), 10) / 2 > y) {
+          tooltip.setAttribute(
+            "x",
+            x - parseInt(tooltip.children[0].clientWidth, 10) / 2
+          );
+          tooltip.setAttribute(
+            "y",
+            y - (tooltip.children[0].clientHeight / 2) * 3
+          );
+          tooltip.children[0].classList.add("down");
+        } else {
+          tooltip.setAttribute(
+            "x",
+            x - parseInt(tooltip.children[0].clientWidth, 10) / 2
+          );
+          tooltip.setAttribute(
+            "y",
+            y + parseInt(tooltip.children[0].clientHeight, 10) / 2
+          );
+          tooltip.children[0].classList.remove("down");
+        }
+      }
+    };
 
-  drawCircle(
-    x: number,
-    y: number,
-    r: number,
-    s: number,
-    e: number,
-    counterclockwise = false
-  ) {
-    this.ctx.beginPath();
-    this.ctx.fillStyle = "blue";
-    this.ctx.strokeStyle = "white";
-    this.ctx.arc(x, y, r, s, e, counterclockwise);
-    this.ctx.fill();
-    this.ctx.stroke();
-    this.ctx.closePath();
-  }
+    const handlePointMouseLeave = (event) => {
+      const tooltip = document.getElementById("tooltip-fo");
+      const chart = document.getElementById("graph-rect");
+      if (chart && tooltip) {
+        tooltip.classList.remove("visible");
+      }
+    };
 
-  drawMultiLineString(
-    text: string,
-    x: number,
-    y: number,
-    fontSize: number,
-    fontColor: string
-  ) {
-    this.ctx.textAlign = "center";
-    this.ctx.textBaseline = "middle";
-    const lines = text.split("\n");
-    this.ctx.save();
-    this.ctx.font = `sans-serif ${fontSize}px`;
-    const textWidth = this.ctx.measureText(lines).width;
-    const midHeight =
-      this.ctx.measureText(lines).actualBoundingBoxAscent +
-      this.ctx.measureText(lines).actualBoundingBoxDescent;
-    this.ctx.translate(x, y - midHeight * lines.length);
-    this.ctx.fillStyle = this.props.options.labels.textColor;
-    for (let i = 0; i < lines.length; i++) {
-      this.ctx.fillText(
-        lines[i].toUpperCase(),
-        0 + textWidth / 2,
-        i * fontSize
-      );
-    }
-    this.ctx.restore();
-  }
+    const handlePointMouseClick = (event) => {
+      const { onPointClick } = this.props.options,
+        { singleHoverHighlight } = this.getOption("graph.point");
 
-  updateCanvas() {
-    const ratio = this.calculateRatio();
-    this.canvas.width = Math.ceil(this.canvas.clientWidth * ratio);
-    this.canvas.height = Math.ceil(this.canvas.clientHeight * ratio);
-    this.canvas.style.width = this.props.width + "px";
-    this.canvas.style.height = this.props.height + "px";
-    this.canvas.getContext("2d").setTransform(ratio, 0, 0, ratio, 0, 0);
-    this.ctx = this.canvas.getContext("2d");
-  }
+      if (!singleHoverHighlight) {
+        const pointInfIndex = event.target.getAttribute("data-index"),
+          pi = pointInfIndex.split(",")[1],
+          dslength = this.props.data.datasets.length;
+        for (let i = 0; i < dslength; i++) {
+          const element = document.querySelector(
+            `circle[data-index="${i},${pi}"]`
+          );
 
-  render() {
-    return <></>;
+          const targetClassList = element.classList;
+
+          if (targetClassList.contains("selected")) {
+            const styleData = JSON.parse(element.getAttribute("data-style"));
+            targetClassList.remove("selected");
+            this.setElementStyle(
+              element,
+              "stroke",
+              styleData.stroke,
+              "strokeWidth",
+              styleData.strokeWidth
+            );
+          } else {
+            targetClassList.add("selected");
+            this.setElementStyle(
+              element,
+              "stroke",
+              this.getOption("graph.point.selected.strokeColor"),
+              "strokeWidth",
+              this.getOption("graph.point.selected.strokeWidth")
+            );
+            this.setElementStyle(element, "stroke", "white", "strokeWidth", 2);
+          }
+        }
+      } else {
+        if (event && event.target) {
+          const targetClassList = event.target.classList;
+          if (targetClassList.contains("selected")) {
+            const styleData = JSON.parse(
+              event.target.getAttribute("data-style")
+            );
+            targetClassList.remove("selected");
+            this.setElementStyle(
+              event.target,
+              "stroke",
+              styleData.stroke,
+              "strokeWidth",
+              styleData.strokeWidth
+            );
+          } else {
+            targetClassList.add("selected");
+            this.setElementStyle(
+              event.target,
+              "stroke",
+              this.getOption("graph.point.selected.strokeColor"),
+              "strokeWidth",
+              this.getOption("graph.point.selected.strokeWidth")
+            );
+          }
+        }
+      }
+
+      if (onPointClick) {
+        onPointClick(event, event.target.getAttribute("data-index"));
+      }
+    };
+
+    const drawnPoints = [];
+    points.forEach((p, pIndex) => {
+      // const { radius, pointColor, strokeColor, strokeWidth } = this.getOption(
+      //   "graph.point"
+      // );
+      // if (this.getOption("graph.point.backdropPoint")) {
+      //   drawnPoints.push(
+      //     <circle
+      //       key={`point-backdrop-${p[0]}-${[1]}-${Math.random()}`}
+      //       cx={p[0]}
+      //       cy={p[1]}
+      //       r={radius}
+      //       fill={pointColor}
+      //       stroke={strokeColor}
+      //       strokeWidth={strokeWidth}
+      //     />
+      //   );
+      // }
+      // const pointFill =
+      //   this.getDataSetsOption(
+      //     this.props.data.datasets[index],
+      //     pIndex,
+      //     "pointColor"
+      //   ) || pointColor;
+      // const pointStroke =
+      //   this.getDataSetsOption(
+      //     this.props.data.datasets[index],
+      //     pIndex,
+      //     "strokeColor"
+      //   ) || strokeColor;
+      // const pointStrokeWidth =
+      //   this.getDataSetsOption(
+      //     this.props.data.datasets[index],
+      //     pIndex,
+      //     "strokeWidth"
+      //   ) || strokeWidth;
+      // drawnPoints.push(
+      //   <circle
+      //     key={`point-${p[0]}-${[1]}-${Math.random()}`}
+      //     className="chart-point"
+      //     cx={p[0]}
+      //     cy={p[1]}
+      //     r={radius}
+      //     onMouseEnter={handlePointMouseEnter}
+      //     onMouseLeave={handlePointMouseLeave}
+      //     onClick={handlePointMouseClick}
+      //     data-value={p[3]}
+      //     data-index={`${index},${pIndex}`}
+      //     data-style={JSON.stringify({
+      //       fill: pointFill,
+      //       stroke: pointStroke,
+      //       strokeWidth: pointStrokeWidth,
+      //     })}
+      //     fill={pointFill}
+      //     stroke={pointStroke}
+      //     strokeWidth={pointStrokeWidth}
+      //   />
+      // );
+    });
+    return drawnPoints;
   }
 }

@@ -1,0 +1,128 @@
+@import "styles/_main.scss";
+
+.chart-renderer {
+  animation: chart-renderer-clearup 1ms;
+}
+
+@keyframes chart-renderer-clearup {
+  0% {
+    opacity: 0.99;
+  }
+
+  100% {
+    opacity: 1;
+  }
+}
+
+svg[id^="svg-chart-"] {
+  overflow: visible;
+  #tooltip-fo {
+    pointer-events: none;
+    overflow: visible;
+    opacity: 0;
+    position: relative;
+    transition: visibility 0s linear 300ms, opacity 300ms;
+    &.visible {
+      pointer-events: all;
+      opacity: 1;
+      transition: visibility 0s linear 300ms, opacity 300ms;
+    }
+    .chart-tooltip {
+      position: relative;
+      background: #2c405a;
+      border: 1px solid #3f536e;
+      padding: 15px;
+      border-radius: 4px;
+      @extend .font-campton-medium;
+      font-size: 11px;
+      line-height: 13px;
+      letter-spacing: 0.3px;
+      color: #a8c6df;
+      font-weight: 500;
+      &:after {
+        background: #2c405a;
+        width: 15px;
+        height: 15px;
+        content: " ";
+        position: absolute;
+        top: -0.5rem;
+        left: 0;
+        right: 0;
+        margin-left: auto;
+        margin-right: auto;
+        text-align: center;
+        transform: rotate(45deg);
+        border-top: 1px solid #3f536e;
+        border-left: 1px solid #3f536e;
+      }
+
+      &.down[class] {
+        &:after {
+          background: #2c405a;
+          width: 15px;
+          height: 15px;
+          content: " ";
+          position: absolute;
+          top: unset;
+          bottom: -0.54rem;
+          left: 0;
+          right: 0;
+          margin-left: auto;
+          margin-right: auto;
+          text-align: center;
+          transform: rotate(45deg);
+          border-top: unset;
+          border-left: unset;
+          border-bottom: 1px solid #3f536e;
+          border-right: 1px solid #3f536e;
+        }
+      }
+    }
+  }
+  .indicator {
+    foreignObject {
+      font-family: Campton, sans-serif;
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      line-height: 9px;
+      color: white;
+      div {
+        height: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+    }
+  }
+  .x-axis-labels {
+    @extend .font-campton-medium;
+    color: #a8c6df;
+    font-size: 11px;
+    line-height: 12px;
+    letter-spacing: 2px;
+    white-space: pre-line;
+    text-align: center;
+    text-transform: uppercase;
+  }
+  .x-axis-box {
+    @extend .font-campton;
+    font-size: 9px;
+    line-height: 9px;
+    letter-spacing: 0.5px;
+    color: white;
+    font-weight: 600;
+    div {
+      display: flex;
+      height: 100%;
+      justify-content: center;
+      align-items: center;
+    }
+  }
+  .chart-point {
+    transition: stroke 300ms linear 100ms, stroke-width 300ms linear 100ms;
+    .selected {
+      transition: stroke 300ms linear 100ms, stroke-width 300ms linear 100ms;
+    }
+  }
+}

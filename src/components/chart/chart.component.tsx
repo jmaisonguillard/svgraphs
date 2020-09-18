@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect } from "react";
-import "./chart.component.css";
 import { Chart } from "./chart.utils";
+import "./chart.component.scss";
 
 interface ChartProps {
   data: () => void | object;
@@ -15,8 +15,8 @@ interface ChartProps {
 }
 
 const Canvas = React.forwardRef((props: any, ref: any) => (
-  <canvas
-    id={props.id || `canvas-chart-${Math.floor(Math.random() * 10000)}`}
+  <svg
+    id={props.id || `svg-chart-${Math.floor(Math.random() * 10000)}`}
     className="chart-renderer"
     ref={ref}
     width={props.width || 300}

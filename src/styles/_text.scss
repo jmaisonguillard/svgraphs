@@ -1,0 +1,54 @@
+$transforms: uppercase, lowercase, capitalize, normal-case;
+$decorations: underline, line-through, no-underline;
+$weights: (
+  "hairline": 100,
+  "thin": 200,
+  "light": 300,
+  "normal": 400,
+  "medium": 500,
+  "semibold": 600,
+  "bold": 700,
+  "extrabold": 800,
+  "black": 900,
+);
+$fonts: (
+  "campton": "Campton",
+  "campton-medium": "CamptonMedium",
+  "campton-bold": "CamptonBold",
+  "campton-book": "CamptonBook",
+  "gordita": "Gordita",
+  "gordita-bold": "GorditaBold",
+  "gordita-medium": "GorditaMedium",
+  "gordita-light": "GorditaLight",
+);
+$whitespaces: normal, nowrap, pre, pre-line, pre-wrap;
+
+@each $transform in $transforms {
+  .#{$transform} {
+    text-transform: $transform;
+  }
+}
+
+@each $decoration in $decorations {
+  .#{$decoration} {
+    text-decoration: $decoration;
+  }
+}
+
+@each $name, $weight in $weights {
+  .font-#{$name} {
+    font-weight: $weight !important;
+  }
+}
+
+@each $name, $font in $fonts {
+  .font-#{$name} {
+    font-family: $font, sans-serif !important;
+  }
+}
+
+@each $whitespace in $whitespaces {
+  .whitespace-#{$whitespace} {
+    white-space: $whitespace !important;
+  }
+}
