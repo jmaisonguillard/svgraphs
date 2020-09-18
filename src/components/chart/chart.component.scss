@@ -104,6 +104,9 @@ svg[id^="svg-chart-"] {
     white-space: pre-line;
     text-align: center;
     text-transform: uppercase;
+    foreignObject {
+      overflow: visible;
+    }
   }
   .x-axis-box {
     @extend .font-campton;

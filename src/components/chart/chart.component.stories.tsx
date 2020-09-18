@@ -1,11 +1,10 @@
+import dayjs from "dayjs";
 import React from "react";
 import {
   BloodPressureCategory,
   VitalsChecker,
 } from "../../classes/vitals-checker.class";
 import { Line } from "./chart.component";
-import { groupBy } from "lodash";
-import dayjs from "dayjs";
 
 export default {
   title: "Charts/Line Chart",
@@ -13,6 +12,31 @@ export default {
 };
 
 const vitalsChecker = new VitalsChecker();
+
+var getDates = function (startDate: Date, endDate: Date) {
+  var dates = [],
+    currentDate: Date = startDate,
+    addDays = function (days) {
+      var date = new Date(this.valueOf());
+      date.setDate(date.getDate() + days);
+      return date;
+    };
+  while (currentDate <= endDate) {
+    const year = currentDate.getFullYear(),
+      month = currentDate.getMonth(),
+      day = currentDate.getDate(),
+      formattedMonth = month.toString().length < 2 ? `0${month}` : month,
+      formattedDay = day.toString().length < 2 ? `0${day}` : day,
+      date = [year, formattedMonth, formattedDay].join("-");
+    dates.push(date);
+    currentDate = addDays.call(currentDate, 1);
+  }
+  return dates;
+};
+
+var dates = getDates(new Date(2020, 9, 17), new Date(2020, 9, 23));
+
+const tooltipHtml = `<div>{takenAtDateTime}</div><h1>{systolic}/{diastolic}</h1>`;
 
 const chartData = [
   {
@@ -97,8 +121,11 @@ const chartData = [
   },
 ];
 
-var datas = groupBy(chartData, function (data) {
-  return dayjs(data.takenAtDateTime).startOf("d").format();
+const datas = dates.map((date: string) => {
+  const sets = chartData.filter(
+    (data) => data.takenAtDateTime.indexOf(date) > -1
+  );
+  return sets;
 });
 
 const datasets = [
@@ -125,6 +152,14 @@ const datasets = [
     data: Object.keys(datas).map((data) =>
       datas[data].map((d) => parseInt(d.systolic, 10))
     ),
+    tooltip: Object.keys(datas).map((data) =>
+      datas[data].map((d) =>
+        tooltipHtml.replaceAll(
+          /{(takenAtDateTime|systolic|diastolic)}/gi,
+          (match) => d[match.replace(/[^\w\s]/gi, "")]
+        )
+      )
+    ),
   },
   {
     pointColor: Object.keys(datas).map((data) =>
@@ -149,6 +184,14 @@ const datasets = [
     data: Object.keys(datas).map((data) =>
       datas[data].map((d) => parseInt(d.diastolic, 10))
     ),
+    tooltip: Object.keys(datas).map((data) =>
+      datas[data].map((d) =>
+        tooltipHtml.replaceAll(
+          /{(takenAtDateTime|systolic|diastolic)}/gi,
+          (match) => d[match.replace(/[^\w\s]/gi, "")]
+        )
+      )
+    ),
   },
 ];
 
@@ -160,7 +203,7 @@ LineChart.args = {
   width: 749,
   height: 377,
   options: {
-    padding: [30, 50, 40, 77],
+    padding: [30, 50, 50, 77],
     labels: {
       type: "date",
       format: "ddd\nM/DD",
@@ -177,15 +220,7 @@ LineChart.args = {
     },
   },
   data: {
-    labels: [
-      "2020-09-15T00:00:00-05:00",
-      "2020-09-16T00:00:00-05:00",
-      "2020-09-17T00:00:00-05:00",
-      "2020-09-18T00:00:00-05:00",
-      "2020-09-19T00:00:00-05:00",
-      "2020-09-20T00:00:00-05:00",
-      "2020-09-21T00:00:00-05:00",
-    ],
+    labels: [...dates],
     labelBox: ["HD", null, "PD", null, null, "HD", null],
     indicators: [130, 80],
     tooltip:

@@ -24,7 +24,7 @@ export class VitalsChecker implements VitalsCheckerInterface {
     if (type === "systolic") {
       if (value < 80) {
         return SEVERITY.below;
-      } else if (value >= 80 || value < 120) {
+      } else if (value >= 80 && value < 120) {
         return SEVERITY.normal;
       } else if (value >= 120 && value <= 139) {
         return SEVERITY.mild;
@@ -39,7 +39,7 @@ export class VitalsChecker implements VitalsCheckerInterface {
     if (type === "diastolic") {
       if (value < 60) {
         return SEVERITY.below;
-      } else if (value >= 60 || value < 80) {
+      } else if (value >= 60 && value < 80) {
         return SEVERITY.normal;
       } else if (value >= 80 && value <= 89) {
         return SEVERITY.mild;

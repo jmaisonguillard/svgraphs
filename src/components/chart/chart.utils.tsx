@@ -9,8 +9,6 @@ type ChartInterface = {
   ctx: CanvasRenderingContext2D;
 } & Partial<DefaultProps>;
 
-const tooltipRegex = /{(?<resource>label|dsd)([\|date:](?<format>[a-zA-Z,: [\]]+)|.(?<index>[0-9{1, 9}]))}/gm;
-
 const defaultProps = {
   data: {} as any,
   id: "" as string,
@@ -63,6 +61,11 @@ const defaultProps = {
     XAxis: {
       min: 1 as number,
       max: 1 as number,
+    },
+    tooltips: {
+      callbacks: {
+        innerHtml: (tooltipItem, data) => {},
+      },
     },
   } as any,
   redaw: false as boolean,
@@ -235,10 +238,10 @@ export class Chart extends React.Component<ChartInterface> {
                     this.getOption("labels.format")
                   );
                 }
-                const x = left + sectionWidth * index,
-                  y = graphHeight + bottom,
-                  lines = displayLabel.split("\n").length,
-                  height = 9 / 2 + 9 * lines;
+                const lines = displayLabel.split("\n").length,
+                  height = 9 / 2 + 9 * lines,
+                  x = left + sectionWidth * index,
+                  y = graphHeight + top + height / 2;
                 return (
                   <g
                     key={`${this.chart.id}-x-axis-labels-${index}`}
@@ -279,12 +282,12 @@ export class Chart extends React.Component<ChartInterface> {
 
             {/* Generate Label Blocks */}
             {this.props.data.labelBox &&
-              this.props.data.labelBox.map((box, index) => {
+              this.props.data.labelBox.map((box: string, index: number) => {
                 const width = 40,
                   height = 16,
                   radius = height / 2,
                   x = left + sectionWidth * index + width - height / 2,
-                  y = graphHeight + bottom - height - height / 4;
+                  y = graphHeight + top - height / 2;
                 if (!box) return null;
                 return (
                   <g
@@ -334,17 +337,7 @@ export class Chart extends React.Component<ChartInterface> {
   }
 
   drawToolTip() {
-    const parseToolTipData = (data) => {
-      const matches = [...data.matchAll(tooltipRegex)];
-      for (let match of matches) {
-        if (match.groups.resource === "label") {
-          data = data.replace(match[0], "");
-        }
-      }
-      return data;
-    };
-
-    const constructHtml = { __html: parseToolTipData(this.props.data.tooltip) };
+    const constructHtml = { __html: "" };
     return (
       <foreignObject width="200" x={200} y={200} id="tooltip-fo">
         <div
@@ -376,6 +369,22 @@ export class Chart extends React.Component<ChartInterface> {
               graphHeight - this.props.data.datasets[i].data[x][z],
               0,
               this.props.data.datasets[i].data[x][z],
+              get(
+                this,
+                `props.data.datasets.${i}.pointColor.${x}.${z}`,
+                this.getOption("graph.point.pointColor")
+              ),
+              get(
+                this,
+                `props.data.datasets.${i}.strokeColor.${x}.${z}`,
+                this.getOption("graph.point.strokeColor")
+              ),
+              get(
+                this,
+                `props.data.datasets.${i}.strokeWidth.${x}.${z}`,
+                this.getOption("graph.point.strokeWidth")
+              ),
+              get(this, `props.data.datasets.${i}.tooltip.${x}.${z}`, ""),
             ]);
           }
         } else {
@@ -385,6 +394,22 @@ export class Chart extends React.Component<ChartInterface> {
             graphHeight - this.props.data.datasets[i].data[x] + radius / 2,
             0,
             this.props.data.datasets[i].data[x],
+            get(
+              this,
+              `props.data.datasets.${i}.pointColor.${x}`,
+              this.getOption("graph.point.pointColor")
+            ),
+            get(
+              this,
+              `props.data.datasets.${i}.strokeColor.${x}`,
+              this.getOption("graph.point.strokeColor")
+            ),
+            get(
+              this,
+              `props.data.datasets.${i}.strokeWidth.${x}`,
+              this.getOption("graph.point.strokeWidth")
+            ),
+            get(this, `props.data.datasets.${i}.tooltip.${x}`, ""),
           ]);
         }
       }
@@ -469,26 +494,17 @@ export class Chart extends React.Component<ChartInterface> {
       const tooltip = document.getElementById("tooltip-fo");
       const chart = document.getElementById("graph-rect");
       if (chart && tooltip) {
+        tooltip.children[0].innerHTML = event.target.getAttribute(
+          "data-tooltip"
+        );
         tooltip.classList.add("visible");
         if (parseInt(chart.getAttribute("height"), 10) / 2 > y) {
-          tooltip.setAttribute(
-            "x",
-            x - parseInt(tooltip.children[0].clientWidth, 10) / 2
-          );
-          tooltip.setAttribute(
-            "y",
-            y - (tooltip.children[0].clientHeight / 2) * 3
-          );
+          tooltip.setAttribute("x", x - 107 + 8);
+          tooltip.setAttribute("y", y - tooltip.children[0].clientHeight - 25);
           tooltip.children[0].classList.add("down");
         } else {
-          tooltip.setAttribute(
-            "x",
-            x - parseInt(tooltip.children[0].clientWidth, 10) / 2
-          );
-          tooltip.setAttribute(
-            "y",
-            y + parseInt(tooltip.children[0].clientHeight, 10) / 2
-          );
+          tooltip.setAttribute("x", x - 107 + 8);
+          tooltip.setAttribute("y", y + 25);
           tooltip.children[0].classList.remove("down");
         }
       }
@@ -498,7 +514,7 @@ export class Chart extends React.Component<ChartInterface> {
       const tooltip = document.getElementById("tooltip-fo");
       const chart = document.getElementById("graph-rect");
       if (chart && tooltip) {
-        tooltip.classList.remove("visible");
+        // tooltip.classList.remove("visible");
       }
     };
 
@@ -574,62 +590,58 @@ export class Chart extends React.Component<ChartInterface> {
 
     const drawnPoints = [];
     points.forEach((p, pIndex) => {
-      // const { radius, pointColor, strokeColor, strokeWidth } = this.getOption(
-      //   "graph.point"
-      // );
-      // if (this.getOption("graph.point.backdropPoint")) {
-      //   drawnPoints.push(
-      //     <circle
-      //       key={`point-backdrop-${p[0]}-${[1]}-${Math.random()}`}
-      //       cx={p[0]}
-      //       cy={p[1]}
-      //       r={radius}
-      //       fill={pointColor}
-      //       stroke={strokeColor}
-      //       strokeWidth={strokeWidth}
-      //     />
-      //   );
-      // }
-      // const pointFill =
-      //   this.getDataSetsOption(
-      //     this.props.data.datasets[index],
-      //     pIndex,
-      //     "pointColor"
-      //   ) || pointColor;
-      // const pointStroke =
-      //   this.getDataSetsOption(
-      //     this.props.data.datasets[index],
-      //     pIndex,
-      //     "strokeColor"
-      //   ) || strokeColor;
-      // const pointStrokeWidth =
-      //   this.getDataSetsOption(
-      //     this.props.data.datasets[index],
-      //     pIndex,
-      //     "strokeWidth"
-      //   ) || strokeWidth;
-      // drawnPoints.push(
-      //   <circle
-      //     key={`point-${p[0]}-${[1]}-${Math.random()}`}
-      //     className="chart-point"
-      //     cx={p[0]}
-      //     cy={p[1]}
-      //     r={radius}
-      //     onMouseEnter={handlePointMouseEnter}
-      //     onMouseLeave={handlePointMouseLeave}
-      //     onClick={handlePointMouseClick}
-      //     data-value={p[3]}
-      //     data-index={`${index},${pIndex}`}
-      //     data-style={JSON.stringify({
-      //       fill: pointFill,
-      //       stroke: pointStroke,
-      //       strokeWidth: pointStrokeWidth,
-      //     })}
-      //     fill={pointFill}
-      //     stroke={pointStroke}
-      //     strokeWidth={pointStrokeWidth}
-      //   />
-      // );
+      const { radius } = this.getOption("graph.point");
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const [
+        x,
+        y,
+        acc,
+        value,
+        pointColor,
+        strokeColor,
+        strokeWidth,
+        tooltip,
+      ] = p;
+      if (this.getOption("graph.point.backdropPoint")) {
+        const { pointColor, strokeColor, strokeWidth } = this.getOption(
+          "graph.option"
+        );
+        drawnPoints.push(
+          <circle
+            key={`point-backdrop-${x}-${y}-${Math.random()}`}
+            cx={x}
+            cy={y}
+            r={radius}
+            fill={pointColor}
+            stroke={strokeColor}
+            strokeWidth={strokeWidth}
+          />
+        );
+      }
+
+      drawnPoints.push(
+        <circle
+          key={`point-${x}-${y}-${Math.random()}`}
+          className="chart-point"
+          cx={x}
+          cy={y}
+          r={radius}
+          onMouseEnter={handlePointMouseEnter}
+          onMouseLeave={handlePointMouseLeave}
+          onClick={handlePointMouseClick}
+          data-value={value}
+          data-index={`${index},${pIndex}`}
+          data-style={JSON.stringify({
+            fill: pointColor,
+            stroke: strokeColor,
+            strokeWidth: strokeWidth,
+          })}
+          data-tooltip={tooltip}
+          fill={pointColor}
+          stroke={strokeColor}
+          strokeWidth={strokeWidth}
+        />
+      );
     });
     return drawnPoints;
   }
