@@ -1,9 +1,11 @@
 import dayjs from "dayjs";
 import React from "react";
+import { renderToString } from "react-dom/server";
 import {
   BloodPressureCategory,
   VitalsChecker,
 } from "../../classes/vitals-checker.class";
+import useEventBus from "../../helpers/useEventBus";
 import { Line } from "./chart.component";
 
 export default {
@@ -35,8 +37,6 @@ var getDates = function (startDate: Date, endDate: Date) {
 };
 
 var dates = getDates(new Date(2020, 9, 17), new Date(2020, 9, 23));
-
-const tooltipHtml = `<div>{takenAtDateTime}</div><h1>{systolic}/{diastolic}</h1>`;
 
 const chartData = [
   {
@@ -119,83 +119,145 @@ const chartData = [
     takenAtDateTime: "2020-09-20T17:23:17",
     source: null,
   },
+  {
+    diastolic: "100",
+    systolic: "220",
+    heartRate: "90",
+    patientId: 47,
+    vitalId: 112,
+    alertId: 100,
+    takenAtDateTime: "2020-09-20T17:23:17",
+    source: null,
+  },
+  {
+    diastolic: "70",
+    systolic: "116",
+    heartRate: "90",
+    patientId: 47,
+    vitalId: 112,
+    alertId: 100,
+    takenAtDateTime: "2020-09-22T17:23:17",
+    source: null,
+  },
 ];
 
-const datas = dates.map((date: string) => {
+const remappedChartDataByDate = dates.map((date: string) => {
   const sets = chartData.filter(
     (data) => data.takenAtDateTime.indexOf(date) > -1
   );
+
   return sets;
 });
 
-const datasets = [
-  {
-    pointColor: Object.keys(datas).map((data) =>
-      datas[data].map((d) =>
-        vitalsChecker.bloodPresureCheck(
-          BloodPressureCategory.SYSTOLIC,
-          parseInt(d.systolic, 10),
-          d.alertId ? 1 : 0.2
-        )
-      )
-    ),
-    strokeColor: Object.keys(datas).map((data) =>
-      datas[data].map((d) =>
-        vitalsChecker.bloodPresureCheck(
-          BloodPressureCategory.SYSTOLIC,
-          parseInt(d.systolic, 10),
-          1
-        )
-      )
-    ),
-    strokeWidth: 1,
-    data: Object.keys(datas).map((data) =>
-      datas[data].map((d) => parseInt(d.systolic, 10))
-    ),
-    tooltip: Object.keys(datas).map((data) =>
-      datas[data].map((d) =>
-        tooltipHtml.replaceAll(
-          /{(takenAtDateTime|systolic|diastolic)}/gi,
-          (match) => d[match.replace(/[^\w\s]/gi, "")]
-        )
-      )
-    ),
-  },
-  {
-    pointColor: Object.keys(datas).map((data) =>
-      datas[data].map((d) =>
-        vitalsChecker.bloodPresureCheck(
-          BloodPressureCategory.DIASTOLIC,
-          parseInt(d.diastolic, 10),
-          d.alertId ? 1 : 0.2
-        )
-      )
-    ),
-    strokeColor: Object.keys(datas).map((data) =>
-      datas[data].map((d) =>
-        vitalsChecker.bloodPresureCheck(
-          BloodPressureCategory.DIASTOLIC,
-          parseInt(d.diastolic, 10),
-          1
-        )
-      )
-    ),
-    strokeWidth: 1,
-    data: Object.keys(datas).map((data) =>
-      datas[data].map((d) => parseInt(d.diastolic, 10))
-    ),
-    tooltip: Object.keys(datas).map((data) =>
-      datas[data].map((d) =>
-        tooltipHtml.replaceAll(
-          /{(takenAtDateTime|systolic|diastolic)}/gi,
-          (match) => d[match.replace(/[^\w\s]/gi, "")]
-        )
-      )
-    ),
-  },
-];
+function createSubArrays(parent, index, data, ...children) {
+  for (let child of children) {
+    parent[index][child] = data.map((data: any[], index: number) => []);
+  }
+}
 
-const LineChartTemplate = (args: any) => <Line {...args} />;
+function setSubArray(parent, parentIndex, index, ...children: any[]) {
+  let i = 0;
+  const l = children.length;
+  while (i < l) {
+    const key = children[i - 1];
+    const value = children[i];
+    if (i % 2) {
+      parent[parentIndex][key][index].push(value);
+    }
+    i++;
+  }
+}
+
+const chartDataMap = [...new Array(2)].map((arr, index) => ({
+  type:
+    index > 0
+      ? BloodPressureCategory.DIASTOLIC
+      : BloodPressureCategory.SYSTOLIC,
+  pointColor: [],
+  strokeColor: [],
+  strokeWidth: [],
+  data: [],
+  tooltip: [],
+  alertId: [],
+  vitalId: [],
+}));
+
+let currentIndex: number = 0;
+const length: number = chartDataMap.length;
+
+while (currentIndex < length) {
+  createSubArrays(
+    chartDataMap,
+    currentIndex,
+    remappedChartDataByDate,
+    "pointColor",
+    "strokeColor",
+    "strokeWidth",
+    "data",
+    "tooltip",
+    "alertId",
+    "vitalId"
+  );
+
+  for (let i = 0; i < remappedChartDataByDate.length; i++) {
+    for (let x = 0; x < remappedChartDataByDate[i].length; x++) {
+      const data = remappedChartDataByDate[i][x],
+        bpType = chartDataMap[currentIndex]["type"],
+        bpValue = parseInt(data[bpType], 10),
+        pointColor = vitalsChecker.bloodPresureCheck(bpType, bpValue),
+        strokeColor = pointColor,
+        vitalPriorityColor = vitalsChecker.bloodPressurePrioritySeverity(
+          data.systolic,
+          data.diastolic
+        ),
+        tooltip = renderToString(
+          <div>
+            {dayjs(data.takenAtDateTime).format("ddd, MMM DD [at] h:mm A")}
+            <h1 className={`vital-severity-text ${vitalPriorityColor}`}>
+              {data.systolic}/{data.diastolic}
+            </h1>
+          </div>
+        );
+
+      setSubArray(
+        chartDataMap,
+        currentIndex,
+        i,
+        "pointColor",
+        pointColor,
+        "strokeColor",
+        strokeColor,
+        "strokeWidth",
+        1,
+        "data",
+        bpValue,
+        "tooltip",
+        tooltip,
+        "alertId",
+        data.alertId,
+        "vitalId",
+        data.vitalId
+      );
+    }
+  }
+  currentIndex++;
+}
+
+const LineChartTemplate = (args: any) => {
+  const { dispatch } = useEventBus;
+  return (
+    <>
+      <Line {...args} />
+      <button
+        onClick={() => {
+          dispatch("selectAll");
+        }}
+      >
+        Select All
+      </button>
+    </>
+  );
+};
 
 export const LineChart = LineChartTemplate.bind({});
 LineChart.args = {
@@ -213,18 +275,31 @@ LineChart.args = {
         backdropPoint: true,
         radius: 5,
         singleHoverHighlight: false,
+        dataAttributes: ["alertId", "vitalId"],
+        customClass: (data: any) => {
+          const classes: string[] = [];
+
+          const parsedData = JSON.parse(data);
+
+          if (parsedData.alertId) classes.push("unread");
+
+          return classes.join(" ");
+        },
       },
     },
-    onPointClick: (event, relationId) => {
-      // console.log(event, relationId);
+    onPointClick: (event: React.MouseEvent<HTMLElement>) => {
+      if (event && event.target) {
+        const element = event.currentTarget,
+          stringifiedData = element.getAttribute("data-resources"),
+          data = JSON.parse(stringifiedData);
+        console.log(data);
+      }
     },
   },
   data: {
     labels: [...dates],
     labelBox: ["HD", null, "PD", null, null, "HD", null],
     indicators: [130, 80],
-    tooltip:
-      "<small>{label|date:ddd,MMM dd [at] H:MM A}</small><h1>{dsd.0}/{dsd.1}</h1>",
     // datasets: [
     //   {
     //     pointColor: "rgba(29,198,108,0.2)",
@@ -239,6 +314,6 @@ LineChart.args = {
     //     data: [80, 100, 130, 140, 120, 100, 80],
     //   },
     // ],
-    datasets,
+    datasets: chartDataMap,
   },
 };

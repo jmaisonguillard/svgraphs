@@ -1,8 +1,8 @@
-// @ts-nocheck
 import React from "react";
 import ReactDOM from "react-dom";
 import { merge, get } from "lodash";
 import dayjs from "dayjs";
+import useEventBus from "../../helpers/useEventBus";
 
 type ChartInterface = {
   canvas: HTMLCanvasElement;
@@ -16,7 +16,7 @@ const defaultProps = {
   height: 150 as number,
   options: {
     backgroundColor: "rgba(38, 55, 76, 1)" as string,
-    padding: 0 as string | number[],
+    padding: (0 as unknown) as string | number[],
     onPointClick: () => {},
     labels: {
       type: "" as string,
@@ -39,6 +39,10 @@ const defaultProps = {
           pointColor: "transparent" as string,
           strokeColor: "rgba(255, 255, 255, 1)" as string,
           strokeWidth: 2 as number,
+        },
+        customClass: () => {},
+        callbacks: {
+          selectAll() {},
         },
       },
       path: {
@@ -77,7 +81,8 @@ type DefaultProps = Readonly<typeof defaultProps>;
 export class Chart extends React.Component<ChartInterface> {
   chart: SVGSVGElement;
   chartPadding: number[] = [];
-  points: number[] = [];
+  points: any[] = [];
+  useEventBus = useEventBus;
 
   static defaultProps = defaultProps;
 
@@ -139,6 +144,8 @@ export class Chart extends React.Component<ChartInterface> {
   drawLineChart() {
     this.updateGraph();
 
+    useEventBus.on("selectAll", this.selectAllPoints.bind(this));
+
     const [top, right, bottom, left] = this.chartPadding;
     const [graphWidth, graphHeight] = [
       this.chart.clientWidth - right - left,
@@ -173,6 +180,7 @@ export class Chart extends React.Component<ChartInterface> {
             {/* Display Graph */}
             <rect
               id={`graph-rect`}
+              className="chart-inner-graph"
               x={left}
               y={top}
               width={graphWidth}
@@ -188,7 +196,7 @@ export class Chart extends React.Component<ChartInterface> {
                 const width = 37,
                   height = 16,
                   x = width / 2,
-                  y = graphHeight - indicator;
+                  y = graphHeight - indicator + top;
 
                 return (
                   <g
@@ -220,7 +228,7 @@ export class Chart extends React.Component<ChartInterface> {
                       x1={x + width}
                       y1={y}
                       x2={graphWidth + left + 20}
-                      y2={y + height / 2}
+                      y2={y}
                       stroke={this.getOption("indicators.borderColor")}
                       strokeWidth={this.getOption("indicators.borderWidth")}
                       strokeDasharray={4}
@@ -264,20 +272,18 @@ export class Chart extends React.Component<ChartInterface> {
               Array(sections)
                 .fill(true)
                 .map((section: number, index: number) => {
-                  if (index > 0) {
-                    return (
-                      <line
-                        key={`${this.chart.id}-x-axis-dividers-${index}`}
-                        className={`${this.chart.id}-x-axis-dividers-${index}`}
-                        x1={left + sectionWidth * index}
-                        y1={top}
-                        x2={left + sectionWidth * index}
-                        y2={this.chart.clientHeight - bottom}
-                        stroke={this.getOption("graph.borderColor")}
-                        strokeWidth={this.getOption("graph.borderWidth")}
-                      />
-                    );
-                  }
+                  return index > 0 ? (
+                    <line
+                      key={`${this.chart.id}-x-axis-dividers-${index}`}
+                      className={`${this.chart.id}-x-axis-dividers-${index}`}
+                      x1={left + sectionWidth * index}
+                      y1={top}
+                      x2={left + sectionWidth * index}
+                      y2={this.chart.clientHeight - bottom}
+                      stroke={this.getOption("graph.borderColor")}
+                      strokeWidth={this.getOption("graph.borderWidth")}
+                    />
+                  ) : null;
                 })}
 
             {/* Generate Label Blocks */}
@@ -339,7 +345,7 @@ export class Chart extends React.Component<ChartInterface> {
   drawToolTip() {
     const constructHtml = { __html: "" };
     return (
-      <foreignObject width="200" x={200} y={200} id="tooltip-fo">
+      <foreignObject width={200} height={200} x={200} y={200} id="tooltip-fo">
         <div
           className="chart-tooltip"
           dangerouslySetInnerHTML={constructHtml}
@@ -366,7 +372,7 @@ export class Chart extends React.Component<ChartInterface> {
               (sectionWidth - 15) / this.props.data.datasets[i].data[x].length;
             this.points[i].push([
               left + sectionWidth * x + (z > 0 ? spacing * z : 15),
-              graphHeight - this.props.data.datasets[i].data[x][z],
+              graphHeight + top - this.props.data.datasets[i].data[x][z],
               0,
               this.props.data.datasets[i].data[x][z],
               get(
@@ -385,13 +391,30 @@ export class Chart extends React.Component<ChartInterface> {
                 this.getOption("graph.point.strokeWidth")
               ),
               get(this, `props.data.datasets.${i}.tooltip.${x}.${z}`, ""),
+              JSON.stringify(
+                Object.assign(
+                  {},
+                  ...this.getOption("graph.point.dataAttributes").map(
+                    (attribute) => ({
+                      [attribute]: get(
+                        this,
+                        `props.data.datasets.${i}.${attribute}.${x}.${z}`,
+                        null
+                      ),
+                    })
+                  )
+                )
+              ),
             ]);
           }
         } else {
           const { radius } = this.getOption("graph.point");
           this.points[i].push([
             left + sectionWidth * x + 1 * 15,
-            graphHeight - this.props.data.datasets[i].data[x] + radius / 2,
+            graphHeight +
+              top -
+              this.props.data.datasets[i].data[x] +
+              radius / 2,
             0,
             this.props.data.datasets[i].data[x],
             get(
@@ -410,6 +433,20 @@ export class Chart extends React.Component<ChartInterface> {
               this.getOption("graph.point.strokeWidth")
             ),
             get(this, `props.data.datasets.${i}.tooltip.${x}`, ""),
+            JSON.stringify(
+              Object.assign(
+                {},
+                ...this.getOption("graph.point.dataAttributes").map(
+                  (attribute) => ({
+                    [attribute]: get(
+                      this,
+                      `props.data.datasets.${i}.${attribute}.${x}`,
+                      null
+                    ),
+                  })
+                )
+              )
+            ),
           ]);
         }
       }
@@ -440,37 +477,45 @@ export class Chart extends React.Component<ChartInterface> {
 
     let lines = [];
 
-    points.reduce((previous, current, index, array) => {
-      const p = array[index - 1] || current;
-      const n = array[index + 1] || current;
-      const l = line(p, n);
+    points.reduce(
+      (previous: never, current: never, index: number, array: never[]) => {
+        const p = array[index - 1] || current;
+        const n = array[index + 1] || current;
+        const l = line(p, n);
 
-      const length = 0;
-      const angle = l.angle + (array ? Math.PI : 0);
-      const x = current[0] + angle * length;
-      const y = current[1] + angle * length;
+        const length = 0;
+        const angle = l.angle + (array ? Math.PI : 0);
+        const x = current[0] + angle * length;
+        const y = current[1] + angle * length;
 
-      lines.push(
-        <line
-          key={`${this.chart.id}-point-path-${index}-${
-            l.length
-          }-${Math.random()}`}
-          x1={p[0]}
-          y1={p[1]}
-          x2={x}
-          y2={y}
-          stroke={this.getOption("graph.path.borderColor")}
-          strokeWidth={this.getOption("graph.path.borderWidth")}
-        />
-      );
+        lines.push(
+          <line
+            key={`${this.chart.id}-point-path-${index}-${
+              l.length
+            }-${Math.random()}`}
+            x1={p[0]}
+            y1={p[1]}
+            x2={x}
+            y2={y}
+            stroke={this.getOption("graph.path.borderColor")}
+            strokeWidth={this.getOption("graph.path.borderWidth")}
+          />
+        );
 
-      return false;
-    });
+        return current;
+      }
+    );
 
     return lines;
   }
 
-  setElementStyle(element: Element, ...args) {
+  toKebab(string: string) {
+    return string
+      .replace(/([a-z0-9]|(?=[A-Z]))([A-Z])/g, "$1-$2")
+      .toLowerCase();
+  }
+
+  setElementStyle(element: HTMLElement, ...args) {
     let i = 0;
     const l = args.length;
     while (i < l) {
@@ -485,123 +530,174 @@ export class Chart extends React.Component<ChartInterface> {
     }
   }
 
-  drawPoints(points: [], index?: number) {
-    const handlePointMouseEnter = (event) => {
-      const [x, y] = [
-        parseInt(event.target.getAttribute("cx"), 10),
-        parseInt(event.target.getAttribute("cy"), 10),
-      ];
-      const tooltip = document.getElementById("tooltip-fo");
-      const chart = document.getElementById("graph-rect");
-      if (chart && tooltip) {
-        tooltip.children[0].innerHTML = event.target.getAttribute(
-          "data-tooltip"
+  unsetElementStyle(element: HTMLElement, ...args) {
+    for (let arg of args) {
+      element.style.removeProperty(this.toKebab(arg));
+    }
+  }
+
+  selectAllPoints() {
+    document.querySelectorAll(".chart-point").forEach((point: HTMLElement) => {
+      let opts = { view: window, bubbles: true, cancelable: true, buttons: 1 };
+      if (point) {
+        var event: any = new MouseEvent("click", { bubbles: true });
+        event.simulated = true;
+        event.bind(this);
+        point.dispatchEvent(event);
+        // const event = new Event(React.MouseEvent<HTMLElement>, point);
+        // point.dispatchEvent(new MouseEvent("mousedown", opts));
+        // point.dispatchEvent(new MouseEvent("mouseup", opts));
+        // point.dispatchEvent(new MouseEvent("click", opts));
+      }
+    });
+  }
+
+  handlePointMouseEnter(event) {
+    const [x, y] = [
+      parseInt(event.target.getAttribute("cx"), 10),
+      parseInt(event.target.getAttribute("cy"), 10),
+    ];
+    const tooltip: HTMLElement = document.querySelector("#tooltip-fo");
+    const tooltipInner: HTMLElement = document.querySelector(".chart-tooltip");
+    const chart = document.querySelector(".chart-inner-graph");
+    if (chart && tooltip && tooltipInner) {
+      tooltip.style.width = `200px`;
+      tooltip.style.height = `200px`;
+      tooltip.children[0].innerHTML = event.target.getAttribute("data-tooltip");
+      const tooltipData: Element = tooltipInner.children[0];
+      if (tooltipData) {
+        tooltip.style.width = `${tooltipData.clientWidth}px`;
+        tooltip.style.height = `${tooltipData.clientHeight}px`;
+
+        const styles: CSSStyleDeclaration = window.getComputedStyle(
+          tooltipInner
         );
+        const paddingLeftString =
+            styles.getPropertyValue("padding-left") || "15",
+          paddingLeft = parseInt(
+            paddingLeftString.slice(0, paddingLeftString.length - 2),
+            10
+          ),
+          paddingTopString = styles.getPropertyValue("padding-top") || "15",
+          paddingTop = parseInt(
+            paddingTopString.slice(0, paddingTopString.length - 2),
+            10
+          );
+
         tooltip.classList.add("visible");
-        if (parseInt(chart.getAttribute("height"), 10) / 2 > y) {
-          tooltip.setAttribute("x", x - 107 + 8);
-          tooltip.setAttribute("y", y - tooltip.children[0].clientHeight - 25);
+        const [top] = this.chartPadding,
+          chartHeight = parseInt(chart.getAttribute("height"), 10),
+          halfChartHeight = chartHeight / 2,
+          pointPosition = chartHeight + top - y,
+          direction = chartHeight / 2 - pointPosition,
+          maxY = -halfChartHeight,
+          minY = halfChartHeight;
+        if (
+          (direction < 0 && direction > maxY + 30) ||
+          direction > minY - 30 ||
+          halfChartHeight <= direction
+        ) {
+          tooltip.setAttribute(
+            "x",
+            `${x - paddingLeft - tooltipData.clientWidth / 2}`
+          );
+          tooltip.setAttribute(
+            "y",
+            `${y - tooltipData.clientHeight * 2 - paddingTop * 2}`
+          );
           tooltip.children[0].classList.add("down");
-        } else {
-          tooltip.setAttribute("x", x - 107 + 8);
-          tooltip.setAttribute("y", y + 25);
+        } else if (direction > 0 || halfChartHeight >= direction) {
+          tooltip.setAttribute(
+            "x",
+            `${x - paddingLeft - tooltipData.clientWidth / 2}`
+          );
+          tooltip.setAttribute(
+            "y",
+            `${y + paddingTop + tooltipData.clientHeight / 2}`
+          );
           tooltip.children[0].classList.remove("down");
         }
       }
-    };
+    }
+  }
 
-    const handlePointMouseLeave = (event) => {
-      const tooltip = document.getElementById("tooltip-fo");
-      const chart = document.getElementById("graph-rect");
-      if (chart && tooltip) {
-        // tooltip.classList.remove("visible");
-      }
-    };
+  handlePointMouseLeave(event) {
+    const tooltip = document.getElementById("tooltip-fo");
+    const chart = document.getElementById("graph-rect");
+    if (chart && tooltip) {
+      tooltip.classList.remove("visible");
+    }
+  }
 
-    const handlePointMouseClick = (event) => {
-      const { onPointClick } = this.props.options,
-        { singleHoverHighlight } = this.getOption("graph.point");
+  handlePointMouseClick(event) {
+    const { onPointClick } = this.props.options,
+      { singleHoverHighlight } = this.getOption("graph.point");
 
-      if (!singleHoverHighlight) {
-        const pointInfIndex = event.target.getAttribute("data-index"),
-          pi = pointInfIndex.split(",")[1],
-          dslength = this.props.data.datasets.length;
-        for (let i = 0; i < dslength; i++) {
-          const element = document.querySelector(
-            `circle[data-index="${i},${pi}"]`
+    if (!singleHoverHighlight) {
+      const pointInfIndex = event.target.getAttribute("data-index"),
+        pi = pointInfIndex.split(",")[1],
+        dslength = this.props.data.datasets.length;
+      for (let i = 0; i < dslength; i++) {
+        const element: HTMLElement = document.querySelector(
+          `circle[data-index="${i},${pi}"]`
+        );
+
+        const targetClassList = element.classList;
+
+        if (targetClassList.contains("selected")) {
+          targetClassList.remove("selected");
+          this.unsetElementStyle(element, "stroke", "strokeWidth");
+        } else {
+          targetClassList.add("selected");
+          this.setElementStyle(
+            element,
+            "stroke",
+            this.getOption("graph.point.selected.strokeColor"),
+            "strokeWidth",
+            this.getOption("graph.point.selected.strokeWidth")
           );
-
-          const targetClassList = element.classList;
-
-          if (targetClassList.contains("selected")) {
-            const styleData = JSON.parse(element.getAttribute("data-style"));
-            targetClassList.remove("selected");
-            this.setElementStyle(
-              element,
-              "stroke",
-              styleData.stroke,
-              "strokeWidth",
-              styleData.strokeWidth
-            );
-          } else {
-            targetClassList.add("selected");
-            this.setElementStyle(
-              element,
-              "stroke",
-              this.getOption("graph.point.selected.strokeColor"),
-              "strokeWidth",
-              this.getOption("graph.point.selected.strokeWidth")
-            );
-            this.setElementStyle(element, "stroke", "white", "strokeWidth", 2);
-          }
-        }
-      } else {
-        if (event && event.target) {
-          const targetClassList = event.target.classList;
-          if (targetClassList.contains("selected")) {
-            const styleData = JSON.parse(
-              event.target.getAttribute("data-style")
-            );
-            targetClassList.remove("selected");
-            this.setElementStyle(
-              event.target,
-              "stroke",
-              styleData.stroke,
-              "strokeWidth",
-              styleData.strokeWidth
-            );
-          } else {
-            targetClassList.add("selected");
-            this.setElementStyle(
-              event.target,
-              "stroke",
-              this.getOption("graph.point.selected.strokeColor"),
-              "strokeWidth",
-              this.getOption("graph.point.selected.strokeWidth")
-            );
-          }
         }
       }
-
-      if (onPointClick) {
-        onPointClick(event, event.target.getAttribute("data-index"));
+    } else {
+      if (event && event.target) {
+        const targetClassList = event.target.classList;
+        if (targetClassList.contains("selected")) {
+          this.unsetElementStyle(event.target, "stroke", "strokeWidth");
+          targetClassList.remove("selected");
+        } else {
+          targetClassList.add("selected");
+          this.setElementStyle(
+            event.target,
+            "stroke",
+            this.getOption("graph.point.selected.strokeColor"),
+            "strokeWidth",
+            this.getOption("graph.point.selected.strokeWidth")
+          );
+        }
       }
-    };
+    }
 
+    if (onPointClick) {
+      onPointClick(event);
+    }
+  }
+
+  drawPoints(points: [], index?: number) {
     const drawnPoints = [];
     points.forEach((p, pIndex) => {
       const { radius } = this.getOption("graph.point");
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const [
         x,
         y,
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         acc,
         value,
         pointColor,
         strokeColor,
         strokeWidth,
         tooltip,
-      ] = p;
+        data,
+      ]: any[] = p;
       if (this.getOption("graph.point.backdropPoint")) {
         const { pointColor, strokeColor, strokeWidth } = this.getOption(
           "graph.option"
@@ -619,16 +715,20 @@ export class Chart extends React.Component<ChartInterface> {
         );
       }
 
+      const circleID = `point-${x}-${y}-${Math.random()}`;
       drawnPoints.push(
         <circle
-          key={`point-${x}-${y}-${Math.random()}`}
-          className="chart-point"
+          key={circleID}
+          id={circleID}
+          className={`chart-point ${this.getOption("graph.point.customClass")(
+            data
+          )}`}
           cx={x}
           cy={y}
           r={radius}
-          onMouseEnter={handlePointMouseEnter}
-          onMouseLeave={handlePointMouseLeave}
-          onClick={handlePointMouseClick}
+          onMouseEnter={this.handlePointMouseEnter}
+          onMouseLeave={this.handlePointMouseLeave}
+          onClick={this.handlePointMouseClick}
           data-value={value}
           data-index={`${index},${pIndex}`}
           data-style={JSON.stringify({
@@ -636,6 +736,7 @@ export class Chart extends React.Component<ChartInterface> {
             stroke: strokeColor,
             strokeWidth: strokeWidth,
           })}
+          data-resources={data}
           data-tooltip={tooltip}
           fill={pointColor}
           stroke={strokeColor}

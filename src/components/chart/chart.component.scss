@@ -14,8 +14,42 @@
   }
 }
 
+@mixin point-styling($classes...) {
+  @each $class in $classes {
+    &[fill="#{$class}"] {
+      @content;
+    }
+  }
+}
+
 svg[id^="svg-chart-"] {
   overflow: visible;
+  .vital-severity-text {
+    @extend .font-campton-bold;
+    font-size: 20px;
+    line-height: 20px;
+    letter-spacing: 0.2px;
+    margin: 0;
+    padding: 0;
+    margin-top: 2px;
+    &.none,
+    &.normal {
+      color: rgba(1, 213, 101, 1);
+    }
+
+    &.mild {
+      color: rgba(254, 194, 69, 1);
+    }
+
+    &.medium {
+      color: rgba(255, 139, 47, 1);
+    }
+
+    &.below,
+    &.high {
+      color: rgba(255, 59, 48, 1);
+    }
+  }
   #tooltip-fo {
     pointer-events: none;
     overflow: visible;
@@ -123,6 +157,39 @@ svg[id^="svg-chart-"] {
     }
   }
   .chart-point {
+    @include point-styling(none, normal) {
+      fill: rgba(29, 81, 75, 1);
+      stroke: rgba(1, 213, 101, 1);
+      stroke-width: 1px;
+      &.unread {
+        fill: rgba(1, 213, 101, 1);
+      }
+    }
+    @include point-styling(mild) {
+      fill: rgba(76, 59, 58, 1);
+      stroke: rgba(254, 194, 69, 1);
+      stroke-width: 1px;
+      &.unread {
+        fill: rgba(254, 194, 69, 1);
+      }
+    }
+    @include point-styling(medium) {
+      fill: rgba(73, 62, 59, 1);
+      stroke: rgba(255, 139, 47, 1);
+      stroke-width: 1px;
+      &.unread {
+        fill: rgba(255, 139, 47, 1);
+      }
+    }
+    @include point-styling(below, high) {
+      fill: rgba(81, 56, 70, 1);
+      stroke: rgba(255, 59, 48, 1);
+      stroke-width: 1px;
+      &.unread {
+        fill: rgba(255, 59, 48, 1);
+      }
+    }
+
     transition: stroke 300ms linear 100ms, stroke-width 300ms linear 100ms;
     .selected {
       transition: stroke 300ms linear 100ms, stroke-width 300ms linear 100ms;

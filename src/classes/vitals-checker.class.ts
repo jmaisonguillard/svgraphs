@@ -5,51 +5,74 @@ export enum BloodPressureCategory {
   DIASTOLIC = "diastolic",
 }
 
-export class VitalsChecker implements VitalsCheckerInterface {
-  bloodPresureCheck(
-    type: BloodPressureCategory,
-    value: number,
-    opacity = 1
-  ): string {
-    const SEVERITY = {
-      none: `rgba(1,213,101, ${opacity})`,
-      below: `rgba(255,59,48, ${opacity})`,
-      normal: `rgba(1,213,101, ${opacity})`,
-      mild: `rgba(254,194,69, ${opacity})`,
-      medium: `rgba(255,139,47, ${opacity})`,
-      high: `rgba(255,59,48, ${opacity})`,
-    };
+enum SeverityEnum {
+  None,
+  Below,
+  Normal,
+  Mild,
+  Medium,
+  High,
+}
 
+export class VitalsChecker implements VitalsCheckerInterface {
+  getClassNameFromVitalSeverity(severity: SeverityEnum): string {
+    return SeverityEnum[severity].toLowerCase();
+  }
+
+  bloodPresureCheck(type: BloodPressureCategory, value: number): string {
     // Check Systolic First....
     if (type === "systolic") {
       if (value < 80) {
-        return SEVERITY.below;
+        return this.getClassNameFromVitalSeverity(SeverityEnum.Below);
       } else if (value >= 80 && value < 120) {
-        return SEVERITY.normal;
+        return this.getClassNameFromVitalSeverity(SeverityEnum.Normal);
       } else if (value >= 120 && value <= 139) {
-        return SEVERITY.mild;
+        return this.getClassNameFromVitalSeverity(SeverityEnum.Mild);
       } else if (value >= 140 && value <= 159) {
-        return SEVERITY.medium;
+        return this.getClassNameFromVitalSeverity(SeverityEnum.Medium);
       } else if (value >= 160) {
-        return SEVERITY.high;
+        return this.getClassNameFromVitalSeverity(SeverityEnum.High);
       }
     }
 
     // Check Diastolic
     if (type === "diastolic") {
       if (value < 60) {
-        return SEVERITY.below;
+        return this.getClassNameFromVitalSeverity(SeverityEnum.Below);
       } else if (value >= 60 && value < 80) {
-        return SEVERITY.normal;
+        return this.getClassNameFromVitalSeverity(SeverityEnum.Normal);
       } else if (value >= 80 && value <= 89) {
-        return SEVERITY.mild;
+        return this.getClassNameFromVitalSeverity(SeverityEnum.Mild);
       } else if (value >= 90 && value <= 99) {
-        return SEVERITY.medium;
+        return this.getClassNameFromVitalSeverity(SeverityEnum.Medium);
       } else if (value >= 100) {
-        return SEVERITY.high;
+        return this.getClassNameFromVitalSeverity(SeverityEnum.High);
       }
     }
 
-    return SEVERITY.normal;
+    return this.getClassNameFromVitalSeverity(SeverityEnum.Normal);
+  }
+
+  bloodPressurePrioritySeverity(
+    systolicNumber: string | number,
+    diastolicNumber: string | number
+  ): string {
+    let systolic = this.bloodPresureCheck(
+      BloodPressureCategory.SYSTOLIC,
+      parseInt(`${systolicNumber}`, 10)
+    );
+    let diastolic = this.bloodPresureCheck(
+      BloodPressureCategory.DIASTOLIC,
+      parseInt(`${diastolicNumber}`, 10)
+    );
+
+    systolic =
+      SeverityEnum[systolic.charAt(0).toUpperCase() + systolic.slice(1)];
+    diastolic =
+      SeverityEnum[diastolic.charAt(0).toUpperCase() + diastolic.slice(1)];
+
+    return SeverityEnum[
+      systolic > diastolic ? systolic : diastolic
+    ].toLowerCase();
   }
 }
