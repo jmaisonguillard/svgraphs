@@ -3,13 +3,12 @@ import { Chart } from "./chart.utils";
 import "./chart.component.scss";
 
 interface ChartProps {
-  data: () => void | object;
+  data: any[];
   id?: string;
   width?: number;
   height?: number;
   options?: object;
   redraw?: boolean;
-  getElementAtEvent?: () => void;
   type: "line" | "bar" | "smart";
   ref: any;
 }
@@ -17,7 +16,7 @@ interface ChartProps {
 const Canvas = React.forwardRef((props: any, ref: any) => (
   <svg
     id={props.id || `svg-chart-${Math.floor(Math.random() * 10000)}`}
-    className="chart-renderer"
+    className={`svg-chart-${Math.floor(Math.random() * 10000)} chart-renderer`}
     ref={ref}
     width={props.width || 300}
     height={props.height || 150}

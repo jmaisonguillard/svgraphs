@@ -126,6 +126,11 @@ export class Chart extends React.Component<ChartInterface> {
     this.updateGraph();
   }
 
+  componentWillUnmount() {
+    if (this.props.type === "line")
+      useEventBus.remove(`${this.chart.id}-selectAll`, () => {});
+  }
+
   init() {
     switch (this.props.type) {
       case "line":
@@ -144,7 +149,10 @@ export class Chart extends React.Component<ChartInterface> {
   drawLineChart() {
     this.updateGraph();
 
-    useEventBus.on("selectAll", this.selectAllPoints.bind(this));
+    useEventBus.on(
+      `${this.chart.id}-selectAll`,
+      this.selectAllPoints.bind(this)
+    );
 
     const [top, right, bottom, left] = this.chartPadding;
     const [graphWidth, graphHeight] = [
@@ -538,152 +546,165 @@ export class Chart extends React.Component<ChartInterface> {
 
   selectAllPoints() {
     document.querySelectorAll(".chart-point").forEach((point: HTMLElement) => {
-      let opts = { view: window, bubbles: true, cancelable: true, buttons: 1 };
       if (point) {
-        var event: any = new MouseEvent("click", { bubbles: true });
-        event.simulated = true;
-        event.bind(this);
+        const event: any = new Event("click", { bubbles: true });
+        event.synthetic = true;
         point.dispatchEvent(event);
-        // const event = new Event(React.MouseEvent<HTMLElement>, point);
-        // point.dispatchEvent(new MouseEvent("mousedown", opts));
-        // point.dispatchEvent(new MouseEvent("mouseup", opts));
-        // point.dispatchEvent(new MouseEvent("click", opts));
+        if (point.classList.contains("selected")) {
+          this.unsetElementStyle(point, "stroke", "strokeWidth");
+          point.classList.remove("selected");
+        } else {
+          point.classList.add("selected");
+          this.setElementStyle(
+            point,
+            "stroke",
+            this.getOption("graph.point.selected.strokeColor"),
+            "strokeWidth",
+            this.getOption("graph.point.selected.strokeWidth")
+          );
+        }
       }
     });
   }
 
-  handlePointMouseEnter(event) {
-    const [x, y] = [
-      parseInt(event.target.getAttribute("cx"), 10),
-      parseInt(event.target.getAttribute("cy"), 10),
-    ];
-    const tooltip: HTMLElement = document.querySelector("#tooltip-fo");
-    const tooltipInner: HTMLElement = document.querySelector(".chart-tooltip");
-    const chart = document.querySelector(".chart-inner-graph");
-    if (chart && tooltip && tooltipInner) {
-      tooltip.style.width = `200px`;
-      tooltip.style.height = `200px`;
-      tooltip.children[0].innerHTML = event.target.getAttribute("data-tooltip");
-      const tooltipData: Element = tooltipInner.children[0];
-      if (tooltipData) {
-        tooltip.style.width = `${tooltipData.clientWidth}px`;
-        tooltip.style.height = `${tooltipData.clientHeight}px`;
-
-        const styles: CSSStyleDeclaration = window.getComputedStyle(
-          tooltipInner
-        );
-        const paddingLeftString =
-            styles.getPropertyValue("padding-left") || "15",
-          paddingLeft = parseInt(
-            paddingLeftString.slice(0, paddingLeftString.length - 2),
-            10
-          ),
-          paddingTopString = styles.getPropertyValue("padding-top") || "15",
-          paddingTop = parseInt(
-            paddingTopString.slice(0, paddingTopString.length - 2),
-            10
-          );
-
-        tooltip.classList.add("visible");
-        const [top] = this.chartPadding,
-          chartHeight = parseInt(chart.getAttribute("height"), 10),
-          halfChartHeight = chartHeight / 2,
-          pointPosition = chartHeight + top - y,
-          direction = chartHeight / 2 - pointPosition,
-          maxY = -halfChartHeight,
-          minY = halfChartHeight;
-        if (
-          (direction < 0 && direction > maxY + 30) ||
-          direction > minY - 30 ||
-          halfChartHeight <= direction
-        ) {
-          tooltip.setAttribute(
-            "x",
-            `${x - paddingLeft - tooltipData.clientWidth / 2}`
-          );
-          tooltip.setAttribute(
-            "y",
-            `${y - tooltipData.clientHeight * 2 - paddingTop * 2}`
-          );
-          tooltip.children[0].classList.add("down");
-        } else if (direction > 0 || halfChartHeight >= direction) {
-          tooltip.setAttribute(
-            "x",
-            `${x - paddingLeft - tooltipData.clientWidth / 2}`
-          );
-          tooltip.setAttribute(
-            "y",
-            `${y + paddingTop + tooltipData.clientHeight / 2}`
-          );
-          tooltip.children[0].classList.remove("down");
-        }
-      }
-    }
-  }
-
-  handlePointMouseLeave(event) {
-    const tooltip = document.getElementById("tooltip-fo");
-    const chart = document.getElementById("graph-rect");
-    if (chart && tooltip) {
-      tooltip.classList.remove("visible");
-    }
-  }
-
-  handlePointMouseClick(event) {
-    const { onPointClick } = this.props.options,
-      { singleHoverHighlight } = this.getOption("graph.point");
-
-    if (!singleHoverHighlight) {
-      const pointInfIndex = event.target.getAttribute("data-index"),
-        pi = pointInfIndex.split(",")[1],
-        dslength = this.props.data.datasets.length;
-      for (let i = 0; i < dslength; i++) {
-        const element: HTMLElement = document.querySelector(
-          `circle[data-index="${i},${pi}"]`
-        );
-
-        const targetClassList = element.classList;
-
-        if (targetClassList.contains("selected")) {
-          targetClassList.remove("selected");
-          this.unsetElementStyle(element, "stroke", "strokeWidth");
-        } else {
-          targetClassList.add("selected");
-          this.setElementStyle(
-            element,
-            "stroke",
-            this.getOption("graph.point.selected.strokeColor"),
-            "strokeWidth",
-            this.getOption("graph.point.selected.strokeWidth")
-          );
-        }
-      }
-    } else {
-      if (event && event.target) {
-        const targetClassList = event.target.classList;
-        if (targetClassList.contains("selected")) {
-          this.unsetElementStyle(event.target, "stroke", "strokeWidth");
-          targetClassList.remove("selected");
-        } else {
-          targetClassList.add("selected");
-          this.setElementStyle(
-            event.target,
-            "stroke",
-            this.getOption("graph.point.selected.strokeColor"),
-            "strokeWidth",
-            this.getOption("graph.point.selected.strokeWidth")
-          );
-        }
-      }
-    }
-
-    if (onPointClick) {
-      onPointClick(event);
-    }
-  }
-
   drawPoints(points: [], index?: number) {
     const drawnPoints = [];
+
+    const handlePointMouseEnter = (event) => {
+      const [x, y] = [
+        parseInt(event.target.getAttribute("cx"), 10),
+        parseInt(event.target.getAttribute("cy"), 10),
+      ];
+      const tooltip: HTMLElement = document.querySelector("#tooltip-fo");
+      const tooltipInner: HTMLElement = document.querySelector(
+        ".chart-tooltip"
+      );
+      const chart = document.querySelector(".chart-inner-graph");
+      if (chart && tooltip && tooltipInner) {
+        tooltip.style.width = `200px`;
+        tooltip.style.height = `200px`;
+        tooltip.children[0].innerHTML = event.target.getAttribute(
+          "data-tooltip"
+        );
+        const tooltipData: Element = tooltipInner.children[0];
+        if (tooltipData) {
+          tooltip.style.width = `${tooltipData.clientWidth}px`;
+          tooltip.style.height = `${tooltipData.clientHeight}px`;
+
+          const styles: CSSStyleDeclaration = window.getComputedStyle(
+            tooltipInner
+          );
+          const paddingLeftString =
+              styles.getPropertyValue("padding-left") || "15",
+            paddingLeft = parseInt(
+              paddingLeftString.slice(0, paddingLeftString.length - 2),
+              10
+            ),
+            paddingTopString = styles.getPropertyValue("padding-top") || "15",
+            paddingTop = parseInt(
+              paddingTopString.slice(0, paddingTopString.length - 2),
+              10
+            );
+
+          tooltip.classList.add("visible");
+          const [top] = this.chartPadding,
+            chartHeight = parseInt(chart.getAttribute("height"), 10),
+            halfChartHeight = chartHeight / 2,
+            pointPosition = chartHeight + top - y,
+            direction = chartHeight / 2 - pointPosition,
+            maxY = -halfChartHeight,
+            minY = halfChartHeight;
+          if (
+            (direction < 0 && direction > maxY + 30) ||
+            direction > minY - 30 ||
+            halfChartHeight <= direction
+          ) {
+            tooltip.setAttribute(
+              "x",
+              `${x - paddingLeft - tooltipData.clientWidth / 2}`
+            );
+            tooltip.setAttribute(
+              "y",
+              `${y - tooltipData.clientHeight * 2 - paddingTop * 2}`
+            );
+            tooltip.children[0].classList.add("down");
+          } else if (direction > 0 || halfChartHeight >= direction) {
+            tooltip.setAttribute(
+              "x",
+              `${x - paddingLeft - tooltipData.clientWidth / 2}`
+            );
+            tooltip.setAttribute(
+              "y",
+              `${y + paddingTop + tooltipData.clientHeight / 2}`
+            );
+            tooltip.children[0].classList.remove("down");
+          }
+        }
+      }
+    };
+
+    const handlePointMouseLeave = (event) => {
+      const tooltip = document.getElementById("tooltip-fo");
+      const chart = document.getElementById("graph-rect");
+      if (chart && tooltip) {
+        tooltip.classList.remove("visible");
+      }
+    };
+
+    const handlePointMouseClick = (
+      event: React.MouseEvent<HTMLElement> | any
+    ) => {
+      const { onPointClick } = this.props.options,
+        { singleHoverHighlight } = this.getOption("graph.point");
+
+      if (!singleHoverHighlight) {
+        const pointInfIndex = event.target.getAttribute("data-index"),
+          pi = pointInfIndex.split(",")[1],
+          dslength = this.props.data.datasets.length;
+        for (let i = 0; i < dslength; i++) {
+          const element: HTMLElement = document.querySelector(
+            `circle[data-index="${i},${pi}"]`
+          );
+
+          const targetClassList = element.classList;
+
+          if (targetClassList.contains("selected")) {
+            targetClassList.remove("selected");
+            this.unsetElementStyle(element, "stroke", "strokeWidth");
+          } else {
+            targetClassList.add("selected");
+            this.setElementStyle(
+              element,
+              "stroke",
+              this.getOption("graph.point.selected.strokeColor"),
+              "strokeWidth",
+              this.getOption("graph.point.selected.strokeWidth")
+            );
+          }
+        }
+      } else {
+        if (event && event.target) {
+          const targetClassList = event.target.classList;
+          if (targetClassList.contains("selected")) {
+            this.unsetElementStyle(event.target, "stroke", "strokeWidth");
+            targetClassList.remove("selected");
+          } else {
+            targetClassList.add("selected");
+            this.setElementStyle(
+              event.target,
+              "stroke",
+              this.getOption("graph.point.selected.strokeColor"),
+              "strokeWidth",
+              this.getOption("graph.point.selected.strokeWidth")
+            );
+          }
+        }
+      }
+
+      if (onPointClick) {
+        onPointClick(event);
+      }
+    };
     points.forEach((p, pIndex) => {
       const { radius } = this.getOption("graph.point");
       const [
@@ -726,9 +747,9 @@ export class Chart extends React.Component<ChartInterface> {
           cx={x}
           cy={y}
           r={radius}
-          onMouseEnter={this.handlePointMouseEnter}
-          onMouseLeave={this.handlePointMouseLeave}
-          onClick={this.handlePointMouseClick}
+          onMouseEnter={handlePointMouseEnter.bind(this)}
+          onMouseLeave={handlePointMouseLeave.bind(this)}
+          onClick={handlePointMouseClick.bind(this)}
           data-value={value}
           data-index={`${index},${pIndex}`}
           data-style={JSON.stringify({

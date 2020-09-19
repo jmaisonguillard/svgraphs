@@ -7,6 +7,7 @@ import {
 } from "../../classes/vitals-checker.class";
 import useEventBus from "../../helpers/useEventBus";
 import { Line } from "./chart.component";
+import { action } from "@storybook/addon-actions";
 
 export default {
   title: "Charts/Line Chart",
@@ -245,12 +246,14 @@ while (currentIndex < length) {
 
 const LineChartTemplate = (args: any) => {
   const { dispatch } = useEventBus;
+
   return (
     <>
-      <Line {...args} />
+      <Line {...args} id="bp-line-graph-chart" />
       <button
         onClick={() => {
-          dispatch("selectAll");
+          action("select-all clicked");
+          dispatch(`bp-line-graph-chart-selectAll`);
         }}
       >
         Select All

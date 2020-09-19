@@ -22,7 +22,8 @@
   }
 }
 
-svg[id^="svg-chart-"] {
+svg[id^="svg-chart-"],
+svg[class^="svg-chart-"] {
   overflow: visible;
   .vital-severity-text {
     @extend .font-campton-bold;
